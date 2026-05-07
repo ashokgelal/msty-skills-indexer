@@ -32,9 +32,6 @@ const config = {
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   r2Bucket: process.env.R2_BUCKET,
   r2Prefix: trimSlashes(process.env.R2_PREFIX || "app/latest/assets/mstySkills"),
-  latestAssetKey: trimSlashes(
-    process.env.LATEST_ASSET_KEY || "app/latest/assets/mstySkills.json",
-  ),
   publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || ""),
 };
 
@@ -673,6 +670,9 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
     source: SKILLS_ORIGIN,
     summary,
     files: {
+      latestSummary: publicArtifactUrl("summary.json.gz"),
+      latestSearch: publicArtifactUrl("search.json.gz"),
+      latestSkills: publicArtifactUrl("skills.json.gz"),
       summary: publicArtifactUrl(`indexes/${runId}/summary.json.gz`),
       skills: publicArtifactUrl(`indexes/${runId}/skills.json.gz`),
       search: publicArtifactUrl(`indexes/${runId}/search.json.gz`),
@@ -680,16 +680,6 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
         publicArtifactUrl(`indexes/${runId}/shards/${String(index).padStart(2, "0")}.json.gz`),
       ),
     },
-  };
-
-  const latestAsset = {
-    schemaVersion: 1,
-    runId,
-    generatedAt: summary.generatedAt,
-    source: SKILLS_ORIGIN,
-    summary,
-    search: searchRecords,
-    files: manifest.files,
   };
 
   artifacts.push({
@@ -700,12 +690,25 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
     cacheControl: "public, max-age=300",
   });
   artifacts.push({
-    key: config.latestAssetKey,
-    body: latestAsset,
-    gzip: false,
+    key: "summary.json",
+    body: summary,
+    gzip: true,
     contentType: "application/json",
     cacheControl: "public, max-age=300",
-    absoluteKey: true,
+  });
+  artifacts.push({
+    key: "search.json",
+    body: searchRecords,
+    gzip: true,
+    contentType: "application/json",
+    cacheControl: "public, max-age=300",
+  });
+  artifacts.push({
+    key: "skills.json",
+    body: skills,
+    gzip: true,
+    contentType: "application/json",
+    cacheControl: "public, max-age=300",
   });
 
   const written = [];
@@ -713,8 +716,8 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
     const serialized = JSON.stringify(artifact.body);
     const body = artifact.gzip ? gzipSync(serialized) : Buffer.from(serialized);
     const key = artifact.gzip ? `${artifact.key}.gz` : artifact.key;
-    const objectKey = artifact.absoluteKey ? key : r2Key(key);
-    await writeLocalArtifact(key, body);
+    const objectKey = r2Key(key);
+    await writeLocalArtifact(objectKey, body, key);
     if (r2) {
       await putR2Object(r2, key, body, artifact);
     }
@@ -723,17 +726,17 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
   return written;
 }
 
-async function writeLocalArtifact(key, body) {
-  const outputPath = path.join(outputRoot, key);
+async function writeLocalArtifact(outputKey, body, logicalKey) {
+  const outputPath = path.join(outputRoot, outputKey);
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, body);
-  if (key === "state/latest-state.json.gz") {
+  if (logicalKey === "state/latest-state.json.gz") {
     await writeFile(path.resolve(process.cwd(), "out", "latest-state.json.gz"), body);
   }
 }
 
 async function putR2Object(r2, key, body, artifact) {
-  const objectKey = artifact.absoluteKey ? key : r2Key(key);
+  const objectKey = r2Key(key);
   await r2.send(
     new PutObjectCommand({
       Bucket: config.r2Bucket,

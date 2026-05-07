@@ -10,7 +10,7 @@ The crawler is intentionally sitemap-first:
 - skips paths disallowed by `robots.txt`
 - refreshes detail pages incrementally
 - extracts JSON-LD, meta tags, visible stats, install command, topics, audits, and `SKILL.md`
-- writes immutable compressed JSON artifacts plus a stable app bootstrap file at `app/latest/assets/mstySkills.json`
+- writes immutable compressed JSON artifacts plus a stable folder manifest at `app/latest/assets/mstySkills/manifest.json`
 
 ## Quick Start
 
@@ -33,14 +33,15 @@ Create an R2 bucket, then create an R2 API token with object read/write access. 
 Optional variables:
 
 - `R2_PREFIX`, default `app/latest/assets/mstySkills`
-- `LATEST_ASSET_KEY`, default `app/latest/assets/mstySkills.json`
 - `PUBLIC_BASE_URL`, used in generated manifests
 
 The script writes:
 
 ```text
-app/latest/assets/mstySkills.json
 app/latest/assets/mstySkills/manifest.json
+app/latest/assets/mstySkills/summary.json.gz
+app/latest/assets/mstySkills/search.json.gz
+app/latest/assets/mstySkills/skills.json.gz
 app/latest/assets/mstySkills/state/latest-state.json.gz
 app/latest/assets/mstySkills/indexes/<run-id>/summary.json.gz
 app/latest/assets/mstySkills/indexes/<run-id>/skills.json.gz
@@ -52,10 +53,10 @@ app/latest/assets/mstySkills/indexes/<run-id>/shards/00.json.gz
 When the bucket is exposed at `<PUBLIC_ASSET_HOST>`, the app bootstrap file is:
 
 ```text
-<PUBLIC_BASE_URL>.json
+<PUBLIC_BASE_URL>/manifest.json
 ```
 
-`mstySkills.json` includes the compact searchable catalog inline and links to the larger gzipped detail artifacts. It should be served with a short cache TTL. Versioned files are immutable and can be cached long-term.
+`manifest.json` includes the run metadata, summary counts, and links to the current gzipped data files. It should be served with a short cache TTL. Versioned files are immutable and can be cached long-term.
 
 ## Schedule
 

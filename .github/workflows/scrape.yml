@@ -46,7 +46,6 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_PREFIX: ${{ vars.R2_PREFIX || 'app/latest/assets/mstySkills' }}
-          LATEST_ASSET_KEY: ${{ vars.LATEST_ASSET_KEY || 'app/latest/assets/mstySkills.json' }}
           PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || '<PUBLIC_BASE_URL>' }}
           MAX_DETAIL_PAGES: ${{ github.event.inputs.max_detail_pages || '1000' }}
           FULL_RECRAWL: ${{ github.event.inputs.full_recrawl || 'false' }}
