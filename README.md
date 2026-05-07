@@ -10,7 +10,7 @@ The crawler is intentionally sitemap-first:
 - skips paths disallowed by `robots.txt`
 - refreshes detail pages incrementally
 - extracts JSON-LD, meta tags, visible stats, install command, topics, audits, and `SKILL.md`
-- writes immutable compressed JSON artifacts plus a small `manifest.json`
+- writes immutable compressed JSON artifacts plus a stable app bootstrap file at `app/latest/assets/mstySkills.json`
 
 ## Quick Start
 
@@ -32,22 +32,30 @@ Create an R2 bucket, then create an R2 API token with object read/write access. 
 
 Optional variables:
 
-- `R2_PREFIX`, default `skills-index`
+- `R2_PREFIX`, default `app/latest/assets/mstySkills`
+- `LATEST_ASSET_KEY`, default `app/latest/assets/mstySkills.json`
 - `PUBLIC_BASE_URL`, used in generated manifests
 
 The script writes:
 
 ```text
-<prefix>/manifest.json
-<prefix>/state/latest-state.json.gz
-<prefix>/indexes/<run-id>/summary.json.gz
-<prefix>/indexes/<run-id>/skills.json.gz
-<prefix>/indexes/<run-id>/search.json.gz
-<prefix>/indexes/<run-id>/shards/00.json.gz
+app/latest/assets/mstySkills.json
+app/latest/assets/mstySkills/manifest.json
+app/latest/assets/mstySkills/state/latest-state.json.gz
+app/latest/assets/mstySkills/indexes/<run-id>/summary.json.gz
+app/latest/assets/mstySkills/indexes/<run-id>/skills.json.gz
+app/latest/assets/mstySkills/indexes/<run-id>/search.json.gz
+app/latest/assets/mstySkills/indexes/<run-id>/shards/00.json.gz
 ...
 ```
 
-`manifest.json` should be served with a short cache TTL. Versioned files are immutable and can be cached long-term.
+When the bucket is exposed at `<PUBLIC_ASSET_HOST>`, the app bootstrap file is:
+
+```text
+<PUBLIC_BASE_URL>.json
+```
+
+`mstySkills.json` includes the compact searchable catalog inline and links to the larger gzipped detail artifacts. It should be served with a short cache TTL. Versioned files are immutable and can be cached long-term.
 
 ## Schedule
 

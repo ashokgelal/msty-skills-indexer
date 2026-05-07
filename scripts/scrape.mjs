@@ -31,7 +31,10 @@ const config = {
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID,
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   r2Bucket: process.env.R2_BUCKET,
-  r2Prefix: trimSlashes(process.env.R2_PREFIX || "skills-index"),
+  r2Prefix: trimSlashes(process.env.R2_PREFIX || "app/latest/assets/mstySkills"),
+  latestAssetKey: trimSlashes(
+    process.env.LATEST_ASSET_KEY || "app/latest/assets/mstySkills.json",
+  ),
   publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || ""),
 };
 
@@ -99,7 +102,7 @@ async function main() {
     runId,
     generatedAt: new Date().toISOString(),
     sitemapHash,
-    skills: mergedSkills.map(toStateRecord),
+    skills: mergedSkills,
   };
 
   const artifactKeys = await writeArtifacts({
@@ -599,23 +602,6 @@ function toSearchRecord(skill) {
   };
 }
 
-function toStateRecord(skill) {
-  return {
-    url: skill.url,
-    packageRef: skill.packageRef,
-    source: skill.source,
-    skill: skill.skill,
-    sitemapLastmod: skill.sitemapLastmod,
-    fetchedAt: skill.fetchedAt,
-    etag: skill.etag,
-    lastModified: skill.lastModified,
-    htmlHash: skill.htmlHash,
-    installs: skill.installs,
-    failedFetches: skill.failedFetches || 0,
-    lastError: skill.lastError || null,
-  };
-}
-
 function buildSummary(params) {
   const auditCounts = countBy(
     params.mergedSkills.map((skill) => summarizeAuditStatus(skill.audits || [])),
@@ -696,6 +682,16 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
     },
   };
 
+  const latestAsset = {
+    schemaVersion: 1,
+    runId,
+    generatedAt: summary.generatedAt,
+    source: SKILLS_ORIGIN,
+    summary,
+    search: searchRecords,
+    files: manifest.files,
+  };
+
   artifacts.push({
     key: "manifest.json",
     body: manifest,
@@ -703,17 +699,26 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
     contentType: "application/json",
     cacheControl: "public, max-age=300",
   });
+  artifacts.push({
+    key: config.latestAssetKey,
+    body: latestAsset,
+    gzip: false,
+    contentType: "application/json",
+    cacheControl: "public, max-age=300",
+    absoluteKey: true,
+  });
 
   const written = [];
   for (const artifact of artifacts) {
     const serialized = JSON.stringify(artifact.body);
     const body = artifact.gzip ? gzipSync(serialized) : Buffer.from(serialized);
     const key = artifact.gzip ? `${artifact.key}.gz` : artifact.key;
+    const objectKey = artifact.absoluteKey ? key : r2Key(key);
     await writeLocalArtifact(key, body);
     if (r2) {
       await putR2Object(r2, key, body, artifact);
     }
-    written.push(publicArtifactUrl(key));
+    written.push(publicObjectUrl(objectKey));
   }
   return written;
 }
@@ -728,7 +733,7 @@ async function writeLocalArtifact(key, body) {
 }
 
 async function putR2Object(r2, key, body, artifact) {
-  const objectKey = r2Key(key);
+  const objectKey = artifact.absoluteKey ? key : r2Key(key);
   await r2.send(
     new PutObjectCommand({
       Bucket: config.r2Bucket,
@@ -775,11 +780,17 @@ function r2Key(key) {
 }
 
 function publicArtifactUrl(key) {
-  const objectKey = r2Key(key);
+  return publicObjectUrl(r2Key(key));
+}
+
+function publicObjectUrl(objectKey) {
   if (!config.publicBaseUrl) {
     return objectKey;
   }
-  return `${config.publicBaseUrl}/${key}`;
+  if (objectKey.startsWith(`${config.r2Prefix}/`)) {
+    return `${config.publicBaseUrl}/${objectKey.slice(config.r2Prefix.length + 1)}`;
+  }
+  return `${objectKey}`;
 }
 
 function summarizeAuditStatus(audits) {
