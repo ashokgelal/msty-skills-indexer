@@ -77,6 +77,39 @@ Dry-run artifacts are written to `out/<run-id>/`.
 
 The generated `search.json.gz` is intended for app-side search bootstrap. The generated `skills.json.gz` contains richer detail records.
 
+## Manual Upload
+
+The repository includes a direct R2 uploader that mirrors the signing approach used by the Ollama models scraper. It does not use the AWS SDK.
+
+Preview the upload plan without writing anything:
+
+```bash
+npm run upload:dry
+```
+
+Upload the latest local run:
+
+```bash
+npm run upload
+```
+
+By default, the uploader looks for the latest `out/<run-id>` directory and uploads every file under it using the same object keys as the local folder layout, for example:
+
+```text
+app/latest/assets/mstySkills/manifest.json
+app/latest/assets/mstySkills/search.json.gz
+app/latest/assets/mstySkills/indexes/<run-id>/search.json.gz
+```
+
+Useful overrides:
+
+```bash
+node scripts/upload-r2.mjs --source out/<run-id> --env-file ../msty-ollama-api/.env
+node scripts/upload-r2.mjs --source out/<run-id> --env-file ../msty-ollama-api/.env --apply
+```
+
+`--apply` is required before any R2 writes happen.
+
 ## Notes
 
 This project does not call undocumented Skills.sh API endpoints. It uses public pages listed in the official sitemap and respects `robots.txt`.

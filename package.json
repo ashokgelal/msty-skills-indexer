@@ -7,7 +7,9 @@
   "scripts": {
     "scrape": "node scripts/scrape.mjs",
     "scrape:dry": "DRY_RUN=1 node scripts/scrape.mjs",
-    "lint": "node --check scripts/scrape.mjs"
+    "upload:dry": "node scripts/upload-r2.mjs",
+    "upload": "node scripts/upload-r2.mjs --apply",
+    "lint": "node --check scripts/scrape.mjs && node --check scripts/upload-r2.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.812.0",
