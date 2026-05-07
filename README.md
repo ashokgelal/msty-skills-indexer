@@ -101,6 +101,8 @@ app/latest/assets/mstySkills/search.json.gz
 app/latest/assets/mstySkills/indexes/<run-id>/search.json.gz
 ```
 
+The uploader refuses to write any object outside `app/latest/assets/mstySkills/`. Pass the run root as `--source out/<run-id>`, not the nested `app/latest/assets/mstySkills` folder.
+
 Useful overrides:
 
 ```bash

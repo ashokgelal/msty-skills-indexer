@@ -5,6 +5,11 @@ import process from "node:process";
 
 const R2_REGION = "auto";
 const R2_SERVICE = "s3";
+const REQUIRED_OBJECT_PREFIX = "app/latest/assets/mstySkills/";
+const PROTECTED_OBJECT_KEYS = new Set([
+  "app/latest/ollama-models.json",
+  "app/latest/assets/mstySkills.json",
+]);
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -38,6 +43,7 @@ async function main() {
       cacheControl: cacheControlFor(relativePath),
     };
   });
+  assertSafeObjectKeys(plans);
 
   console.log(`[plan] Source: ${sourceDir}`);
   console.log(`[plan] Files: ${plans.length}`);
@@ -141,12 +147,23 @@ async function findLatestOutputRun() {
   const runDirs = entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .sort();
-  const latest = runDirs.at(-1);
-  if (!latest) {
-    throw new Error("No output runs found. Run `npm run scrape:dry` first or pass --source <dir>.");
+    .sort()
+    .reverse();
+
+  for (const runDir of runDirs) {
+    const candidate = path.join(outDir, runDir);
+    const manifestPath = path.join(candidate, REQUIRED_OBJECT_PREFIX, "manifest.json");
+    try {
+      const manifestStat = await stat(manifestPath);
+      if (manifestStat.isFile()) {
+        return candidate;
+      }
+    } catch {
+      // Skip incomplete or failed output runs.
+    }
   }
-  return path.join(outDir, latest);
+
+  throw new Error("No completed output runs found. Run `npm run scrape:dry` first or pass --source <dir>.");
 }
 
 async function collectFiles(rootDir) {
@@ -183,6 +200,35 @@ function getRequiredEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
+}
+
+function assertSafeObjectKeys(plans) {
+  const seen = new Set();
+  for (const plan of plans) {
+    if (
+      plan.objectKey.startsWith("/")
+      || plan.objectKey.includes("../")
+      || plan.objectKey.includes("..\\")
+    ) {
+      throw new Error(`Unsafe object key generated: ${plan.objectKey}`);
+    }
+
+    if (!plan.objectKey.startsWith(REQUIRED_OBJECT_PREFIX)) {
+      throw new Error(
+        `Refusing upload because object key is outside ${REQUIRED_OBJECT_PREFIX}: ${plan.objectKey}. `
+          + "Use the run root, e.g. --source out/<run-id>, not the nested mstySkills folder.",
+      );
+    }
+
+    if (PROTECTED_OBJECT_KEYS.has(plan.objectKey)) {
+      throw new Error(`Refusing upload to protected object key: ${plan.objectKey}`);
+    }
+
+    if (seen.has(plan.objectKey)) {
+      throw new Error(`Duplicate object key generated: ${plan.objectKey}`);
+    }
+    seen.add(plan.objectKey);
+  }
 }
 
 async function uploadToR2(plan, config) {

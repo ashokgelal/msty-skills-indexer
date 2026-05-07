@@ -16,6 +16,11 @@ const ROBOTS_URL = `${SKILLS_ORIGIN}/robots.txt`;
 const SITEMAP_URL = `${SKILLS_ORIGIN}/sitemap.xml`;
 const DEFAULT_USER_AGENT =
   "MstySkillsIndexer/0.1 (+https://github.com/mstystudio/msty-skills-indexer)";
+const REQUIRED_OBJECT_PREFIX = "app/latest/assets/mstySkills/";
+const PROTECTED_OBJECT_KEYS = new Set([
+  "app/latest/ollama-models.json",
+  "app/latest/assets/mstySkills.json",
+]);
 
 const config = {
   dryRun: readBool("DRY_RUN", false),
@@ -53,9 +58,11 @@ async function main() {
   const r2 = createR2Client();
   const previousState = await loadPreviousState(r2);
   const robots = await fetchRobots();
-  const sitemapXml = await fetchText(SITEMAP_URL);
-  const sitemapHash = sha256(sitemapXml);
-  const sitemapEntries = parseSitemap(sitemapXml);
+  const sitemap = await fetchSitemapTree(SITEMAP_URL);
+  const sitemapHash = sha256(
+    sitemap.documents.map((document) => `${document.url}\n${document.hash}`).join("\n"),
+  );
+  const sitemapEntries = sitemap.entries;
   const skillUrls = sitemapEntries
     .map((entry) => ({ ...entry, ref: parseSkillUrl(entry.url) }))
     .filter((entry) => entry.ref)
@@ -66,6 +73,9 @@ async function main() {
 
   const crawlableSkillUrls = skillUrls.filter((entry) => !entry.blockedByRobots);
   const blockedCount = skillUrls.length - crawlableSkillUrls.length;
+  if (crawlableSkillUrls.length === 0) {
+    throw new Error("Refusing to publish an empty skills index; no crawlable skill URLs were parsed from the sitemap.");
+  }
   const previousByUrl = new Map(
     (previousState.skills || []).map((skill) => [skill.url, skill]),
   );
@@ -93,6 +103,7 @@ async function main() {
     skippedQueue,
     mergedSkills,
     sitemapHash,
+    sitemapDocumentCount: sitemap.documents.length,
   });
   const state = {
     schemaVersion: 1,
@@ -178,6 +189,33 @@ function isBlockedByRobots(pathname, robots) {
   });
 }
 
+async function fetchSitemapTree(url, seen = new Set()) {
+  if (seen.has(url)) {
+    return { documents: [], entries: [] };
+  }
+  seen.add(url);
+
+  const xml = await fetchText(url);
+  const document = { url, hash: sha256(xml) };
+  const childUrls = parseSitemapIndex(xml);
+  if (childUrls.length === 0) {
+    return {
+      documents: [document],
+      entries: parseSitemap(xml),
+    };
+  }
+
+  const children = [];
+  for (const childUrl of childUrls) {
+    children.push(await fetchSitemapTree(childUrl, seen));
+  }
+
+  return {
+    documents: [document, ...children.flatMap((child) => child.documents)],
+    entries: children.flatMap((child) => child.entries),
+  };
+}
+
 async function fetchText(url, extraHeaders = {}) {
   const response = await fetch(url, {
     headers: {
@@ -190,6 +228,19 @@ async function fetchText(url, extraHeaders = {}) {
     throw new Error(`Fetch failed for ${url}: ${response.status} ${response.statusText}`);
   }
   return await response.text();
+}
+
+function parseSitemapIndex(xml) {
+  const urls = [];
+  const sitemapBlocks = xml.matchAll(/<sitemap>\s*([\s\S]*?)\s*<\/sitemap>/g);
+  for (const block of sitemapBlocks) {
+    const url = extractXmlValue(block[1], "loc");
+    if (!url) continue;
+    const parsed = new URL(url);
+    if (parsed.origin !== SKILLS_ORIGIN) continue;
+    urls.push(parsed.href);
+  }
+  return urls;
 }
 
 function parseSitemap(xml) {
@@ -610,6 +661,7 @@ function buildSummary(params) {
     source: SKILLS_ORIGIN,
     sitemapUrl: SITEMAP_URL,
     sitemapHash: params.sitemapHash,
+    sitemapDocumentCount: params.sitemapDocumentCount,
     sitemapUrlCount: params.sitemapEntries.length,
     skillUrlCount: params.skillUrls.length,
     crawlableSkillUrlCount: params.crawlableSkillUrls.length,
@@ -717,9 +769,10 @@ async function writeArtifacts({ r2, summary, skills, searchRecords, state }) {
     const body = artifact.gzip ? gzipSync(serialized) : Buffer.from(serialized);
     const key = artifact.gzip ? `${artifact.key}.gz` : artifact.key;
     const objectKey = r2Key(key);
+    assertSafeObjectKey(objectKey);
     await writeLocalArtifact(objectKey, body, key);
     if (r2) {
-      await putR2Object(r2, key, body, artifact);
+      await putR2Object(r2, objectKey, body, artifact);
     }
     written.push(publicObjectUrl(objectKey));
   }
@@ -735,8 +788,8 @@ async function writeLocalArtifact(outputKey, body, logicalKey) {
   }
 }
 
-async function putR2Object(r2, key, body, artifact) {
-  const objectKey = r2Key(key);
+async function putR2Object(r2, objectKey, body, artifact) {
+  assertSafeObjectKey(objectKey);
   await r2.send(
     new PutObjectCommand({
       Bucket: config.r2Bucket,
@@ -747,6 +800,27 @@ async function putR2Object(r2, key, body, artifact) {
       CacheControl: artifact.cacheControl,
     }),
   );
+}
+
+function assertSafeObjectKey(objectKey) {
+  if (
+    objectKey.startsWith("/")
+    || objectKey.includes("../")
+    || objectKey.includes("..\\")
+  ) {
+    throw new Error(`Unsafe object key generated: ${objectKey}`);
+  }
+
+  if (!objectKey.startsWith(REQUIRED_OBJECT_PREFIX)) {
+    throw new Error(
+      `Refusing upload because object key is outside ${REQUIRED_OBJECT_PREFIX}: ${objectKey}. `
+        + "Set R2_PREFIX=app/latest/assets/mstySkills.",
+    );
+  }
+
+  if (PROTECTED_OBJECT_KEYS.has(objectKey)) {
+    throw new Error(`Refusing upload to protected object key: ${objectKey}`);
+  }
 }
 
 async function loadPreviousState(r2) {
