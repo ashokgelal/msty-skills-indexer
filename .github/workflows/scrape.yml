@@ -45,6 +45,9 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_PURGE_URLS: ${{ vars.CF_PURGE_URLS || '' }}
           R2_PREFIX: ${{ vars.R2_PREFIX || 'app/latest/assets/mstySkills' }}
           PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || '<PUBLIC_BASE_URL>' }}
           MAX_DETAIL_PAGES: ${{ github.event.inputs.max_detail_pages || '1000' }}

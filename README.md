@@ -29,11 +29,14 @@ Create an R2 bucket, then create an R2 API token with object read/write access. 
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
+- `CF_API_TOKEN`, optional but recommended for purging cache after uploads
+- `CF_ZONE_ID`, optional but recommended for purging cache after uploads
 
 Optional variables:
 
 - `R2_PREFIX`, default `app/latest/assets/mstySkills`
-- `PUBLIC_BASE_URL`, used in generated manifests
+- `PUBLIC_BASE_URL`, default `<PUBLIC_BASE_URL>`
+- `CF_PURGE_URLS`, extra comma-separated URLs to purge in addition to the default stable mstySkills files
 
 The script writes:
 
@@ -57,6 +60,16 @@ When the bucket is exposed at `<PUBLIC_ASSET_HOST>`, the app bootstrap file is:
 ```
 
 `manifest.json` includes the run metadata, summary counts, and links to the current gzipped data files. It should be served with a short cache TTL. Versioned files are immutable and can be cached long-term.
+
+When `CF_API_TOKEN` and `CF_ZONE_ID` are configured, uploads automatically purge:
+
+```text
+<PUBLIC_BASE_URL>/manifest.json
+<PUBLIC_BASE_URL>/summary.json.gz
+<PUBLIC_BASE_URL>/search.json.gz
+<PUBLIC_BASE_URL>/skills.json.gz
+<PUBLIC_BASE_URL>/state/latest-state.json.gz
+```
 
 ## Schedule
 

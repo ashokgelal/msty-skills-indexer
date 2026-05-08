@@ -6,6 +6,14 @@ import process from "node:process";
 const R2_REGION = "auto";
 const R2_SERVICE = "s3";
 const REQUIRED_OBJECT_PREFIX = "app/latest/assets/mstySkills/";
+const DEFAULT_PUBLIC_BASE_URL = "<PUBLIC_BASE_URL>";
+const DEFAULT_PURGE_PATHS = [
+  "manifest.json",
+  "summary.json.gz",
+  "search.json.gz",
+  "skills.json.gz",
+  "state/latest-state.json.gz",
+];
 const PROTECTED_OBJECT_KEYS = new Set([
   "app/latest/ollama-models.json",
   "app/latest/assets/mstySkills.json",
@@ -68,12 +76,12 @@ async function main() {
     console.log(`[upload] ${plan.objectKey}`);
   }
 
-  const purgeUrls = getPurgeUrls();
-  if (purgeUrls.length > 0) {
+  const purgeUrls = getPurgeUrls(config.publicBaseUrl);
+  if (config.cfApiToken && config.cfZoneId) {
     await purgeCache(purgeUrls, config);
     console.log(`[purge] ${purgeUrls.length} URL(s) purged`);
   } else {
-    console.log("[purge] Skipped; CF_API_TOKEN, CF_ZONE_ID, or CF_PURGE_URLS not configured");
+    console.log("[purge] Skipped; CF_API_TOKEN or CF_ZONE_ID not configured");
   }
 }
 
@@ -191,6 +199,7 @@ function loadUploadConfigFromEnv() {
     r2Bucket: getRequiredEnv("R2_BUCKET"),
     cfApiToken: process.env.CF_API_TOKEN?.trim() || "",
     cfZoneId: process.env.CF_ZONE_ID?.trim() || "",
+    publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || DEFAULT_PUBLIC_BASE_URL),
   };
 }
 
@@ -332,13 +341,13 @@ async function purgeCache(urls, config) {
   }
 }
 
-function getPurgeUrls() {
+function getPurgeUrls(publicBaseUrl) {
+  const urls = DEFAULT_PURGE_PATHS.map((relativePath) => `${publicBaseUrl}/${relativePath}`);
   const raw = process.env.CF_PURGE_URLS?.trim();
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  if (raw) {
+    urls.push(...raw.split(",").map((value) => value.trim()).filter(Boolean));
+  }
+  return [...new Set(urls)];
 }
 
 function sha256Hex(data) {
@@ -392,6 +401,10 @@ function cacheControlFor(objectKey) {
 
 function normalizePath(value) {
   return value.split(path.sep).join("/");
+}
+
+function trimTrailingSlash(value) {
+  return String(value || "").replace(/\/+$/g, "");
 }
 
 function formatBytes(bytes) {

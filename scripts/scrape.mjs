@@ -17,6 +17,14 @@ const SITEMAP_URL = `${SKILLS_ORIGIN}/sitemap.xml`;
 const DEFAULT_USER_AGENT =
   "MstySkillsIndexer/0.1 (+https://github.com/mstystudio/msty-skills-indexer)";
 const REQUIRED_OBJECT_PREFIX = "app/latest/assets/mstySkills/";
+const DEFAULT_PUBLIC_BASE_URL = "<PUBLIC_BASE_URL>";
+const DEFAULT_PURGE_PATHS = [
+  "manifest.json",
+  "summary.json.gz",
+  "search.json.gz",
+  "skills.json.gz",
+  "state/latest-state.json.gz",
+];
 const PROTECTED_OBJECT_KEYS = new Set([
   "app/latest/ollama-models.json",
   "app/latest/assets/mstySkills.json",
@@ -37,7 +45,9 @@ const config = {
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   r2Bucket: process.env.R2_BUCKET,
   r2Prefix: trimSlashes(process.env.R2_PREFIX || "app/latest/assets/mstySkills"),
-  publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || ""),
+  publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || DEFAULT_PUBLIC_BASE_URL),
+  cfApiToken: process.env.CF_API_TOKEN?.trim() || "",
+  cfZoneId: process.env.CF_ZONE_ID?.trim() || "",
 };
 
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
@@ -120,6 +130,15 @@ async function main() {
     searchRecords,
     state,
   });
+  if (r2) {
+    const purgeUrls = getPurgeUrls();
+    if (config.cfApiToken && config.cfZoneId) {
+      await purgeCache(purgeUrls);
+      console.log(`Purged ${purgeUrls.length} Cloudflare URL(s)`);
+    } else {
+      console.log("Cloudflare purge skipped; CF_API_TOKEN or CF_ZONE_ID not configured");
+    }
+  }
 
   console.log("Index complete");
   console.log(JSON.stringify({ summary, artifacts: artifactKeys }, null, 2));
@@ -800,6 +819,44 @@ async function putR2Object(r2, objectKey, body, artifact) {
       CacheControl: artifact.cacheControl,
     }),
   );
+}
+
+async function purgeCache(urls) {
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/zones/${config.cfZoneId}/purge_cache`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.cfApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ files: urls }),
+    },
+  );
+  const bodyText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Cloudflare purge failed (${response.status}): ${bodyText}`);
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch {
+    throw new Error(`Cloudflare purge returned non-JSON response: ${bodyText}`);
+  }
+  if (!parsed?.success) {
+    throw new Error(`Cloudflare purge failed: ${bodyText}`);
+  }
+}
+
+function getPurgeUrls() {
+  const urls = DEFAULT_PURGE_PATHS.map((relativePath) => `${config.publicBaseUrl}/${relativePath}`);
+  const raw = process.env.CF_PURGE_URLS?.trim();
+  if (raw) {
+    urls.push(...raw.split(",").map((value) => value.trim()).filter(Boolean));
+  }
+  return [...new Set(urls)];
 }
 
 function assertSafeObjectKey(objectKey) {
