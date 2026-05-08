@@ -47,9 +47,9 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-          CF_PURGE_URLS: ${{ vars.CF_PURGE_URLS || '' }}
+          CF_PURGE_URLS: ${{ secrets.CF_PURGE_URLS || '' }}
           R2_PREFIX: ${{ vars.R2_PREFIX || 'app/latest/assets/mstySkills' }}
-          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || '<PUBLIC_BASE_URL>' }}
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
           MAX_DETAIL_PAGES: ${{ github.event.inputs.max_detail_pages || '1000' }}
           FULL_RECRAWL: ${{ github.event.inputs.full_recrawl || 'false' }}
           DETAIL_CONCURRENCY: "2"

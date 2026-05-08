@@ -17,7 +17,6 @@ const SITEMAP_URL = `${SKILLS_ORIGIN}/sitemap.xml`;
 const DEFAULT_USER_AGENT =
   "MstySkillsIndexer/0.1 (+https://github.com/mstystudio/msty-skills-indexer)";
 const REQUIRED_OBJECT_PREFIX = "app/latest/assets/mstySkills/";
-const DEFAULT_PUBLIC_BASE_URL = "<PUBLIC_BASE_URL>";
 const DEFAULT_PURGE_PATHS = [
   "manifest.json",
   "summary.json.gz",
@@ -45,7 +44,7 @@ const config = {
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   r2Bucket: process.env.R2_BUCKET,
   r2Prefix: trimSlashes(process.env.R2_PREFIX || "app/latest/assets/mstySkills"),
-  publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || DEFAULT_PUBLIC_BASE_URL),
+  publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || ""),
   cfApiToken: process.env.CF_API_TOKEN?.trim() || "",
   cfZoneId: process.env.CF_ZONE_ID?.trim() || "",
 };
@@ -132,16 +131,18 @@ async function main() {
   });
   if (r2) {
     const purgeUrls = getPurgeUrls();
-    if (config.cfApiToken && config.cfZoneId) {
+    if (config.cfApiToken && config.cfZoneId && purgeUrls.length > 0) {
       await purgeCache(purgeUrls);
       console.log(`Purged ${purgeUrls.length} Cloudflare URL(s)`);
+    } else if (config.cfApiToken && config.cfZoneId) {
+      console.log("Cloudflare purge skipped; PUBLIC_BASE_URL or CF_PURGE_URLS not configured");
     } else {
       console.log("Cloudflare purge skipped; CF_API_TOKEN or CF_ZONE_ID not configured");
     }
   }
 
   console.log("Index complete");
-  console.log(JSON.stringify({ summary, artifacts: artifactKeys }, null, 2));
+  console.log(JSON.stringify({ summary, artifactCount: artifactKeys.length }, null, 2));
 }
 
 function validateConfig() {
@@ -851,7 +852,9 @@ async function purgeCache(urls) {
 }
 
 function getPurgeUrls() {
-  const urls = DEFAULT_PURGE_PATHS.map((relativePath) => `${config.publicBaseUrl}/${relativePath}`);
+  const urls = config.publicBaseUrl
+    ? DEFAULT_PURGE_PATHS.map((relativePath) => `${config.publicBaseUrl}/${relativePath}`)
+    : [];
   const raw = process.env.CF_PURGE_URLS?.trim();
   if (raw) {
     urls.push(...raw.split(",").map((value) => value.trim()).filter(Boolean));
@@ -924,7 +927,7 @@ function publicObjectUrl(objectKey) {
   if (objectKey.startsWith(`${config.r2Prefix}/`)) {
     return `${config.publicBaseUrl}/${objectKey.slice(config.r2Prefix.length + 1)}`;
   }
-  return `${objectKey}`;
+  return objectKey;
 }
 
 function summarizeAuditStatus(audits) {

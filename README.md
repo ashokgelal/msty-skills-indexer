@@ -10,7 +10,7 @@ The crawler is intentionally sitemap-first:
 - skips paths disallowed by `robots.txt`
 - refreshes detail pages incrementally
 - extracts JSON-LD, meta tags, visible stats, install command, topics, audits, and `SKILL.md`
-- writes immutable compressed JSON artifacts plus a stable folder manifest at `app/latest/assets/mstySkills/manifest.json`
+- writes immutable compressed JSON artifacts plus a stable manifest
 
 ## Quick Start
 
@@ -31,32 +31,22 @@ Create an R2 bucket, then create an R2 API token with object read/write access. 
 - `R2_BUCKET`
 - `CF_API_TOKEN`, optional but recommended for purging cache after uploads
 - `CF_ZONE_ID`, optional but recommended for purging cache after uploads
+- `PUBLIC_BASE_URL`, required for public manifest URLs and default cache purges
 
 Optional variables:
 
-- `R2_PREFIX`, default `app/latest/assets/mstySkills`
-- `PUBLIC_BASE_URL`, default `<PUBLIC_BASE_URL>`
-- `CF_PURGE_URLS`, extra comma-separated URLs to purge in addition to the default stable mstySkills files
+- `R2_PREFIX`, object-key namespace for generated artifacts
+- `CF_PURGE_URLS`, extra comma-separated URLs to purge in addition to the default stable files
 
 The script writes:
 
 ```text
-app/latest/assets/mstySkills/manifest.json
-app/latest/assets/mstySkills/summary.json.gz
-app/latest/assets/mstySkills/search.json.gz
-app/latest/assets/mstySkills/skills.json.gz
-app/latest/assets/mstySkills/state/latest-state.json.gz
-app/latest/assets/mstySkills/indexes/<run-id>/summary.json.gz
-app/latest/assets/mstySkills/indexes/<run-id>/skills.json.gz
-app/latest/assets/mstySkills/indexes/<run-id>/search.json.gz
-app/latest/assets/mstySkills/indexes/<run-id>/shards/00.json.gz
-...
-```
-
-When the bucket is exposed at `<PUBLIC_ASSET_HOST>`, the app bootstrap file is:
-
-```text
-<PUBLIC_BASE_URL>/manifest.json
+<prefix>/manifest.json
+<prefix>/summary.json.gz
+<prefix>/search.json.gz
+<prefix>/skills.json.gz
+<prefix>/state/latest-state.json.gz
+<prefix>/indexes/<run-id>/...
 ```
 
 `manifest.json` includes the run metadata, summary counts, and links to the current gzipped data files. It should be served with a short cache TTL. Versioned files are immutable and can be cached long-term.

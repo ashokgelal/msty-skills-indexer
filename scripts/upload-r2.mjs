@@ -6,7 +6,6 @@ import process from "node:process";
 const R2_REGION = "auto";
 const R2_SERVICE = "s3";
 const REQUIRED_OBJECT_PREFIX = "app/latest/assets/mstySkills/";
-const DEFAULT_PUBLIC_BASE_URL = "<PUBLIC_BASE_URL>";
 const DEFAULT_PURGE_PATHS = [
   "manifest.json",
   "summary.json.gz",
@@ -77,9 +76,11 @@ async function main() {
   }
 
   const purgeUrls = getPurgeUrls(config.publicBaseUrl);
-  if (config.cfApiToken && config.cfZoneId) {
+  if (config.cfApiToken && config.cfZoneId && purgeUrls.length > 0) {
     await purgeCache(purgeUrls, config);
     console.log(`[purge] ${purgeUrls.length} URL(s) purged`);
+  } else if (config.cfApiToken && config.cfZoneId) {
+    console.log("[purge] Skipped; PUBLIC_BASE_URL or CF_PURGE_URLS not configured");
   } else {
     console.log("[purge] Skipped; CF_API_TOKEN or CF_ZONE_ID not configured");
   }
@@ -199,7 +200,7 @@ function loadUploadConfigFromEnv() {
     r2Bucket: getRequiredEnv("R2_BUCKET"),
     cfApiToken: process.env.CF_API_TOKEN?.trim() || "",
     cfZoneId: process.env.CF_ZONE_ID?.trim() || "",
-    publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || DEFAULT_PUBLIC_BASE_URL),
+    publicBaseUrl: trimTrailingSlash(process.env.PUBLIC_BASE_URL || ""),
   };
 }
 
@@ -342,7 +343,9 @@ async function purgeCache(urls, config) {
 }
 
 function getPurgeUrls(publicBaseUrl) {
-  const urls = DEFAULT_PURGE_PATHS.map((relativePath) => `${publicBaseUrl}/${relativePath}`);
+  const urls = publicBaseUrl
+    ? DEFAULT_PURGE_PATHS.map((relativePath) => `${publicBaseUrl}/${relativePath}`)
+    : [];
   const raw = process.env.CF_PURGE_URLS?.trim();
   if (raw) {
     urls.push(...raw.split(",").map((value) => value.trim()).filter(Boolean));
