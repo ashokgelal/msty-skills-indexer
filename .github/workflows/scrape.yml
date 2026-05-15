@@ -54,6 +54,7 @@ jobs:
           FULL_RECRAWL: ${{ github.event.inputs.full_recrawl || 'false' }}
           DETAIL_CONCURRENCY: "2"
           DETAIL_DELAY_MS: "250"
+          FETCH_TIMEOUT_MS: "30000"
           DETAIL_REFRESH_HOURS: "168"
           POPULAR_REFRESH_HOURS: "6"
           POPULAR_INSTALL_THRESHOLD: "10000"

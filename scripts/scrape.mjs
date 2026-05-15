@@ -36,6 +36,7 @@ const config = {
   maxDetailPages: readInt("MAX_DETAIL_PAGES", 1000),
   detailConcurrency: readInt("DETAIL_CONCURRENCY", 2),
   detailDelayMs: readInt("DETAIL_DELAY_MS", 250),
+  fetchTimeoutMs: readInt("FETCH_TIMEOUT_MS", 30_000),
   detailRefreshHours: readInt("DETAIL_REFRESH_HOURS", 168),
   popularRefreshHours: readInt("POPULAR_REFRESH_HOURS", 6),
   popularInstallThreshold: readInt("POPULAR_INSTALL_THRESHOLD", 10_000),
@@ -239,6 +240,7 @@ async function fetchSitemapTree(url, seen = new Set()) {
 
 async function fetchText(url, extraHeaders = {}) {
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(config.fetchTimeoutMs),
     headers: {
       "user-agent": config.userAgent,
       accept: "text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
@@ -370,13 +372,14 @@ function buildDetailQueue(entries, previousByUrl) {
 
 async function crawlDetails(queue, previousByUrl) {
   const limit = pLimit(config.detailConcurrency);
+  const waitForRequestSlot = createRequestStartThrottle(config.detailDelayMs);
   let completed = 0;
   const startedAt = Date.now();
 
   const results = await Promise.all(
-    queue.map((entry, index) =>
+    queue.map((entry) =>
       limit(async () => {
-        await sleep(index * config.detailDelayMs);
+        await waitForRequestSlot();
         const previous = previousByUrl.get(entry.url);
         try {
           const skill = await fetchSkillDetail(entry, previous);
@@ -410,6 +413,7 @@ async function fetchSkillDetail(entry, previous) {
   if (previous?.lastModified) headers["if-modified-since"] = previous.lastModified;
 
   const response = await fetch(entry.url, {
+    signal: AbortSignal.timeout(config.fetchTimeoutMs),
     headers: {
       "user-agent": config.userAgent,
       accept: "text/html,application/xhtml+xml",
@@ -1028,6 +1032,21 @@ function sha256(value) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createRequestStartThrottle(delayMs) {
+  let nextStartAt = 0;
+
+  return async () => {
+    if (delayMs <= 0) return;
+
+    const now = Date.now();
+    const waitMs = Math.max(0, nextStartAt - now);
+    nextStartAt = Math.max(now, nextStartAt) + delayMs;
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+  };
 }
 
 function readInt(name, fallback) {
