@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 const SKILLS_ORIGIN = "https://skills.sh";
+const SKILLS_HOSTS = new Set(["skills.sh", "www.skills.sh"]);
 const ROBOTS_URL = `${SKILLS_ORIGIN}/robots.txt`;
 const SITEMAP_URL = `${SKILLS_ORIGIN}/sitemap.xml`;
 const DEFAULT_USER_AGENT =
@@ -257,7 +258,7 @@ function parseSitemapIndex(xml) {
     const url = extractXmlValue(block[1], "loc");
     if (!url) continue;
     const parsed = new URL(url);
-    if (parsed.origin !== SKILLS_ORIGIN) continue;
+    if (!isSkillsHost(parsed)) continue;
     urls.push(parsed.href);
   }
   return urls;
@@ -268,8 +269,8 @@ function parseSitemap(xml) {
   const urlBlocks = xml.matchAll(/<url>\s*([\s\S]*?)\s*<\/url>/g);
   for (const block of urlBlocks) {
     const body = block[1];
-    const url = extractXmlValue(body, "loc");
-    if (!url || !url.startsWith(`${SKILLS_ORIGIN}/`)) continue;
+    const url = normalizeSkillsUrl(extractXmlValue(body, "loc"));
+    if (!url) continue;
     entries.push({
       url,
       lastmod: extractXmlValue(body, "lastmod"),
@@ -282,7 +283,7 @@ function parseSitemap(xml) {
 
 function parseSkillUrl(url) {
   const parsed = new URL(url);
-  if (parsed.origin !== SKILLS_ORIGIN) return null;
+  if (!isSkillsHost(parsed)) return null;
   const segments = parsed.pathname.split("/").filter(Boolean);
   if (segments.length !== 3) return null;
   const [owner, repo, skill] = segments;
@@ -294,6 +295,21 @@ function parseSkillUrl(url) {
     source: `${owner}/${repo}`,
     packageRef: `${owner}/${repo}@${skill}`,
   };
+}
+
+function normalizeSkillsUrl(value) {
+  if (!value) return null;
+  const parsed = new URL(value);
+  if (!isSkillsHost(parsed)) return null;
+  parsed.protocol = "https:";
+  parsed.hostname = new URL(SKILLS_ORIGIN).hostname;
+  parsed.port = "";
+  parsed.hash = "";
+  return parsed.href;
+}
+
+function isSkillsHost(parsed) {
+  return parsed.protocol === "https:" && SKILLS_HOSTS.has(parsed.hostname);
 }
 
 function isReservedTopLevel(segment) {
